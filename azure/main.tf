@@ -142,4 +142,22 @@ resource "azurerm_sentinel_automation_rule" "block_attacker" {
     property = "IncidentTitle"
     values   = ["Firewall Rule Tampering Detected"]
   }
+
+# 11. Give the Automation "Badge" (Identity) to the Logic App
+resource "azurerm_logic_app_workflow" "auto_remediate" {
+  name                = "tyrant-eye-auto-remediate"
+  location            = azurerm_resource_group.secure_rg.location
+  resource_group_name = azurerm_resource_group.secure_rg.name
+
+  # THIS IS THE KEY ADDITION:
+  identity {
+    type = "SystemAssigned"
+  }
+}
+
+# 12. Assign the "Network Contributor" role so it can actually block IPs
+resource "azurerm_role_assignment" "logic_app_network_admin" {
+  scope                = azurerm_resource_group.secure_rg.id
+  role_definition_name = "Network Contributor"
+  principal_id         = azurerm_logic_app_workflow.auto_remediate.identity[0].principal_id
 }
