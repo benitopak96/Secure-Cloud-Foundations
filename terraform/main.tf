@@ -56,3 +56,15 @@ resource "google_compute_firewall" "allow_ssh" {
   source_ranges = ["YOUR_OFFICE_IP/32"] 
   priority      = 900
 }
+
+# 6. Create a Secure Storage Bucket
+resource "google_storage_bucket" "security_logs" {
+  name          = "tyrant-security-logs-001" # Names must be unique
+  location      = "US"
+  force_destroy = true
+
+  # SECURITY: Encryption at rest
+  encryption {
+    default_kms_key_name = "" # Uses Google-managed keys by default
+  }
+}
