@@ -10,15 +10,21 @@ resource "google_compute_network" "secure_vpc" {
   auto_create_subnetworks = false # SECURITY: Prevents GCP from creating subnets in every region automatically
 }
 
-# 3. Create a Restricted Subnet
+# 3. Create a Restricted Subnet (UPDATED WITH LOGGING)
 resource "google_compute_subnetwork" "private_subnet" {
   name          = "private-security-subnet"
   ip_cidr_range = "10.0.1.0/24"
   region        = "us-central1"
   network       = google_compute_network.secure_vpc.id
   
-  # SECURITY: Ensures instances don't need public IPs to talk to Google Services
   private_ip_google_access = true 
+
+  # ADD THIS BLOCK TO FIX CKV_GCP_26
+  log_config {
+    aggregation_interval = "INTERVAL_5_SEC"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
+  }
 }
 
 # 4. Create a "Deny All" Firewall Rule (Baseline Security)
