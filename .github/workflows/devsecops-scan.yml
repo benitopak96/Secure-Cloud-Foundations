@@ -1,0 +1,27 @@
+name: DevSecOps-Scan
+
+# 1. Trigger the scan every time you push code to the main branch
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  checkov-scan:
+    runs-on: ubuntu-latest
+    steps:
+      # 2. Check out your code so the scanner can see it
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      # 3. Run the Checkov Security Scanner
+      - name: Run Checkov Scan
+        id: checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          # This ensures the pipeline doesn't stop if it finds an error (for now)
+          soft_fail: false 
+          output_format: cli
