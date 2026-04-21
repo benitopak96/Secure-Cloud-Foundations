@@ -96,4 +96,21 @@ resource "azurerm_monitor_diagnostic_setting" "storage_diagnostics" {
     category = "AllMetrics"
     enabled  = true
   }
+
+# 8. Create an Automated AI Alert Rule in Sentinel
+resource "azurerm_sentinel_alert_rule_scheduled" "firewall_tamper_detect" {
+  name                       = "detect-firewall-tampering"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.tyrant_law.id
+  display_name               = "High Severity: Firewall Rule Tampering Detected"
+  severity                   = "High"
+  query                      = <<QUERY
+    AzureActivity
+    | where OperationNameValue == "Microsoft.Network/networkSecurityGroups/securityRules/write"
+    | where ActivityStatusValue == "Success"
+    | extend User = Caller
+QUERY
+  query_frequency            = "PT5M"
+  query_period               = "PT5M"
+  trigger_threshold          = 0
+  trigger_operator           = "GreaterThan"
 }
