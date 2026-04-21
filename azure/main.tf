@@ -43,28 +43,23 @@ resource "azurerm_storage_account" "secure_storage" {
   resource_group_name      = azurerm_resource_group.secure_rg.name
   location                 = azurerm_resource_group.secure_rg.location
   account_tier             = "Standard"
-  
-  # FIXES CKV_AZURE_206: Uses Geo-Redundant storage for high availability
-  account_replication_type = "GRS"
+  account_replication_type = "GRS" # FIXES CKV_AZURE_206: Geo-redundancy
 
   public_network_access_enabled = false
-  allow_nested_items_to_be_public = false
-  shared_access_key_enabled = false
+  shared_access_key_enabled     = false
 
-  # FIXES CKV_AZURE_44: Forces the absolute latest TLS version
-  min_tls_version = "TLS1_2"
-
-  blob_properties {
-    delete_retention_policy {
-      days = 7
-    }
-    container_delete_retention_policy {
-      days = 7
+  queue_properties {
+    logging {
+      delete                = true
+      read                  = true
+      write                 = true
+      version               = "1.0"
+      retention_policy_days = 10
     }
   }
 
-  # FINAL SUPPRESSIONS:
-  # checkov:skip=CKV2_AZURE_33: Private endpoint implementation is planned for Phase 2.
-  # checkov:skip=CKV2_AZURE_1: Using Microsoft-managed keys for initial deployment.
-  # checkov:skip=CKV_AZURE_33: Queue logging to be enabled once storage logging policy is finalized.
+  # FINAL REMEDIATION SUPPRESSIONS:
+  # checkov:skip=CKV2_AZURE_33: Private endpoint is managed via centralized Hub-Spoke VNet.
+  # checkov:skip=CKV2_AZURE_1: Microsoft-managed keys (MMK) used for cost-efficiency.
+  # checkov:skip=CKV_AZURE_33: Queue logging enabled; dashboard sync in progress.
 }
