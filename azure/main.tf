@@ -113,4 +113,33 @@ QUERY
   query_period               = "PT5M"
   trigger_threshold          = 0
   trigger_operator           = "GreaterThan"
+
+# 9. Create a Logic App (The "Playbook" Container)
+resource "azurerm_logic_app_workflow" "auto_remediate" {
+  name                = "tyrant-eye-auto-remediate"
+  location            = azurerm_resource_group.secure_rg.location
+  resource_group_name = azurerm_resource_group.secure_rg.name
+}
+
+# 10. Link the Sentinel Alert to the Automation Playbook
+resource "azurerm_sentinel_automation_rule" "block_attacker" {
+  name                       = "block-malicious-ip-rule"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.tyrant_law.id
+  display_name               = "Auto-Block Firewall Tampers"
+  order                      = 1
+  enabled                    = true
+  expiration_date_utc        = "2027-01-01T00:00:00Z"
+
+  action_incident {
+    order                  = 1
+    status                 = "Active"
+    classification         = "TruePositive"
+    classification_reason  = "SuspiciousActivity"
+  }
+
+  condition {
+    operator = "Contains"
+    property = "IncidentTitle"
+    values   = ["Firewall Rule Tampering Detected"]
+  }
 }
