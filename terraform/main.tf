@@ -57,14 +57,25 @@ resource "google_compute_firewall" "allow_ssh" {
   priority      = 900
 }
 
-# 6. Create a Secure Storage Bucket
+# 6. Create a Hardened Storage Bucket
 resource "google_storage_bucket" "security_logs" {
-  name          = "tyrant-security-logs-001" # Names must be unique
+  name          = "tyrant-security-logs-001" # Must be globally unique
   location      = "US"
   force_destroy = true
 
-  # SECURITY: Encryption at rest
+  # SECURITY: Prevents accidental public exposure
+  public_access_prevention = "enforced"
+
+  # SECURITY: Ensures consistent IAM policies across all objects
+  uniform_bucket_level_access = true
+
+  # SECURITY: Enables object versioning (Protection against accidental deletion/ransomware)
+  versioning {
+    enabled = true
+  }
+
+  # SECURITY: Encryption using Google-managed keys
   encryption {
-    default_kms_key_name = "" # Uses Google-managed keys by default
+    default_kms_key_name = "" 
   }
 }
