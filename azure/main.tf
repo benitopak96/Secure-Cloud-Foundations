@@ -39,14 +39,23 @@ resource "azurerm_network_security_group" "secure_nsg" {
 
 # 5. Create a Hardened Azure Storage Account
 resource "azurerm_storage_account" "secure_storage" {
-  name                     = "tyrantsecstorage001" 
-  resource_group_name      = azurerm_resource_group.secure_rg.name
-  location                 = azurerm_resource_group.secure_rg.location
-  account_tier             = "Standard"
-  account_replication_type = "GRS" # FIXES CKV_AZURE_206: Geo-redundancy
+  name                          = "tyrantsecstorage001"
+  resource_group_name           = azurerm_resource_group.secure_rg.name
+  location                      = azurerm_resource_group.secure_rg.location
+  account_tier                  = "Standard"
+  account_replication_type      = "GRS"
+  min_tls_version               = "TLS1_2" # FIXES CKV_AZURE_44
+  allow_nested_items_to_be_public = false  # FIXES CKV2_AZURE_47 & CKV_AZURE_190
 
   public_network_access_enabled = false
   shared_access_key_enabled     = false
+
+  blob_properties {
+    versioning_enabled = true
+    delete_retention_policy {
+      days = 7 # FIXES CKV2_AZURE_38: Soft-delete
+    }
+  }
 
   queue_properties {
     logging {
@@ -58,8 +67,7 @@ resource "azurerm_storage_account" "secure_storage" {
     }
   }
 
-  # MOVE THESE INSIDE THE BRACKET:
-  # checkov:skip=CKV2_AZURE_33: Private endpoint is managed via centralized Hub-Spoke VNet.
+  # checkov:skip=CKV2_AZURE_33: Private endpoint managed via centralized Hub-Spoke VNet.
   # checkov:skip=CKV2_AZURE_1: Microsoft-managed keys (MMK) used for cost-efficiency.
   # checkov:skip=CKV_AZURE_33: Queue logging enabled; dashboard sync in progress.
-} 
+}
