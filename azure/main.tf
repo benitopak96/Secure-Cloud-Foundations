@@ -70,4 +70,30 @@ resource "azurerm_storage_account" "secure_storage" {
   # checkov:skip=CKV2_AZURE_33: Private endpoint managed via centralized Hub-Spoke VNet.
   # checkov:skip=CKV2_AZURE_1: Microsoft-managed keys (MMK) used for cost-efficiency.
   # checkov:skip=CKV_AZURE_33: Queue logging enabled; dashboard sync in progress.
+
+# 6. Create the "Brain" database for AI analysis
+resource "azurerm_log_analytics_workspace" "tyrant_law" {
+  name                = "tyrant-security-law"
+  location            = azurerm_resource_group.secure_rg.location
+  resource_group_name = azurerm_resource_group.secure_rg.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
+
+# 7. Connect your Storage Account to the "Brain"
+resource "azurerm_monitor_diagnostic_setting" "storage_diagnostics" {
+  name                       = "storage-to-ai-brain"
+  target_resource_id         = azurerm_storage_account.secure_storage.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.tyrant_law.id
+
+  enabled_log {
+    category = "StorageRead"
+  }
+  enabled_log {
+    category = "StorageWrite"
+  }
+  metric {
+    category = "AllMetrics"
+    enabled  = true
+  }
 }
