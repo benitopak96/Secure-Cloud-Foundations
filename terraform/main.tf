@@ -98,3 +98,26 @@ resource "google_storage_bucket" "security_logs" {
     default_kms_key_name = "" 
   }
 }
+
+# Create a dedicated Logging Bucket for GCP
+resource "google_storage_bucket" "log_bucket" {
+  name          = "tyrant-infra-logs"
+  location      = "US"
+  force_destroy = true
+
+  uniform_bucket_level_access = true
+}
+
+# Update your existing bucket to send logs to the log_bucket
+resource "google_storage_bucket" "secure_bucket" {
+  name          = "tyrant-secure-storage-001"
+  location      = "US"
+  force_destroy = true
+
+  uniform_bucket_level_access = true
+
+  # FIXES 'Bucket should log access' alert
+  logging {
+    log_bucket = google_storage_bucket.log_bucket.name
+  }
+}
