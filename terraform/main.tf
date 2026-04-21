@@ -87,4 +87,21 @@ resource "google_storage_bucket" "secure_bucket" {
     log_bucket        = google_storage_bucket.logging_bucket.name
     log_object_prefix = "gcs-access-logs/"
   }
+
+# 8. Create a Log Sink to export all security-related logs
+resource "google_logging_project_sink" "security_sink" {
+  name        = "tyrant-security-logs-sink"
+  destination = "storage.googleapis.com/${google_storage_bucket.logging_bucket.name}"
+  
+  # This filter captures audit logs (who accessed what)
+  filter      = "resource.type=\"gcs_bucket\" AND logName:\"logs/cloudaudit.googleapis.com\""
+
+  unique_writer_identity = true
+}
+
+# Grant the Sink permission to write to the Bucket
+resource "google_storage_bucket_iam_member" "log_writer" {
+  bucket = google_storage_bucket.logging_bucket.name
+  role   = "roles/storage.objectCreator"
+  member = google_logging_project_sink.security_sink.writer_identity
 }
