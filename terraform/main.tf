@@ -57,24 +57,34 @@ resource "google_compute_firewall" "allow_ssh" {
   priority      = 900
 }
 
-# 6. Create a Hardened Storage Bucket
+# 6. Create a separate bucket for LOGS (This fixes CKV_GCP_62)
+resource "google_storage_bucket" "logging_bucket" {
+  name                     = "tyrant-infra-logs-vault"
+  location                 = "US"
+  public_access_prevention = "enforced"
+  uniform_bucket_level_access = true
+}
+
+# 7. Create your Secure Data Bucket
 resource "google_storage_bucket" "security_logs" {
-  name          = "tyrant-security-logs-001" # Must be globally unique
+  name          = "tyrant-security-data-001" 
   location      = "US"
   force_destroy = true
 
-  # SECURITY: Prevents accidental public exposure
-  public_access_prevention = "enforced"
-
-  # SECURITY: Ensures consistent IAM policies across all objects
+  public_access_prevention    = "enforced"
   uniform_bucket_level_access = true
 
-  # SECURITY: Enables object versioning (Protection against accidental deletion/ransomware)
   versioning {
     enabled = true
   }
 
-  # SECURITY: Encryption using Google-managed keys
+  # THIS BLOCK FIXES THE FAIL: 
+  # It sends access logs to the vault bucket we just made.
+  logging {
+    log_bucket = google_storage_bucket.logging_bucket.name
+    log_object_prefix = "gcs-access-logs/"
+  }
+
   encryption {
     default_kms_key_name = "" 
   }
