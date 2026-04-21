@@ -20,7 +20,7 @@ jobs:
         id: checkov
         uses: bridgecrewio/checkov-action@master
         with:
-          directory: terraform/
+          directory: ./
           framework: terraform
           # This ensures the pipeline doesn't stop if it finds an error (for now)
           soft_fail: false 
