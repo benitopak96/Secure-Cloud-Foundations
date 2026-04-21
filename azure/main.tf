@@ -160,4 +160,16 @@ resource "azurerm_role_assignment" "logic_app_network_admin" {
   scope                = azurerm_resource_group.secure_rg.id
   role_definition_name = "Network Contributor"
   principal_id         = azurerm_logic_app_workflow.auto_remediate.identity[0].principal_id
+
+# 13. Create a Secure Secret for the AI Notification Webhook
+resource "azurerm_key_vault_secret" "notification_webhook" {
+  name         = "tyrant-eye-webhook"
+  value        = "YOUR_DISCORD_OR_SLACK_WEBHOOK_HERE"
+  key_vault_id = azurerm_key_vault.secure_vault.id # Assuming you have a vault from previous hardening
+}
+
+# 14. Add a "Note" to the Sentinel Incident for the AI to process
+resource "azurerm_sentinel_incident_comment" "ai_summary_placeholder" {
+  incident_id = "ai-processing-hook" # This hooks into your Logic App logic
+  comment     = "Tyrant-Eye AI: Analysis in progress... Blocking malicious IP and summarizing event."
 }
