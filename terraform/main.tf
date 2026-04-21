@@ -57,67 +57,34 @@ resource "google_compute_firewall" "allow_ssh" {
   priority      = 900
 }
 
-# 6. Create a separate bucket for LOGS
+# 6. Create a separate bucket for LOGS (The Vault)
 resource "google_storage_bucket" "logging_bucket" {
-  name                     = "tyrant-infra-logs-vault"
-  location                 = "US"
-  public_access_prevention = "enforced"
+  name                        = "tyrant-infra-logs-vault"
+  location                    = "US"
+  public_access_prevention    = "enforced" # FIXES CKV_GCP_114
   uniform_bucket_level_access = true
 
-  # FIXES CKV_GCP_78: Ensures log integrity
   versioning {
-    enabled = true
+    enabled = true # FIXES CKV_GCP_78
   }
 
-  # SUPPRESSES CKV_GCP_62: 
-  # This comment tells Checkov: "I know what I'm doing, stop asking for logs on the log bucket."
   # checkov:skip=CKV_GCP_62: This is the root logging bucket; recursive logging is not required.
 }
 
 # 7. Create your Secure Data Bucket
-resource "google_storage_bucket" "security_logs" {
-  name          = "tyrant-security-data-001" 
-  location      = "US"
-  force_destroy = true
-
-  public_access_prevention    = "enforced"
+resource "google_storage_bucket" "secure_bucket" {
+  name                        = "tyrant-secure-storage-001"
+  location                    = "US"
+  force_destroy               = true
+  public_access_prevention    = "enforced" # FIXES CKV_GCP_114
   uniform_bucket_level_access = true
 
   versioning {
-    enabled = true
+    enabled = true # FIXES CKV_GCP_78
   }
 
-  # THIS BLOCK FIXES THE FAIL: 
-  # It sends access logs to the vault bucket we just made.
   logging {
-    log_bucket = google_storage_bucket.logging_bucket.name
+    log_bucket        = google_storage_bucket.logging_bucket.name
     log_object_prefix = "gcs-access-logs/"
-  }
-
-  encryption {
-    default_kms_key_name = "" 
-  }
-}
-
-# Create a dedicated Logging Bucket for GCP
-resource "google_storage_bucket" "log_bucket" {
-  name          = "tyrant-infra-logs"
-  location      = "US"
-  force_destroy = true
-
-  uniform_bucket_level_access = true
-}
-
-# Update your existing bucket to send logs to the log_bucket
-resource "google_storage_bucket" "secure_bucket" {
-  name          = "tyrant-secure-storage-001"
-  location      = "US"
-  force_destroy = true
-
-  uniform_bucket_level_access = true
-
-  # FIXES 'Bucket should log access' alert
-  logging {
-    log_bucket = google_storage_bucket.log_bucket.name
   }
 }
