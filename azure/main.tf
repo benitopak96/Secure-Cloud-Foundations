@@ -58,8 +58,8 @@ resource "azurerm_storage_account" "secure_storage" {
     }
   }
 
-  # FINAL REMEDIATION SUPPRESSIONS:
+  # MOVE THESE INSIDE THE BRACKET:
   # checkov:skip=CKV2_AZURE_33: Private endpoint is managed via centralized Hub-Spoke VNet.
   # checkov:skip=CKV2_AZURE_1: Microsoft-managed keys (MMK) used for cost-efficiency.
   # checkov:skip=CKV_AZURE_33: Queue logging enabled; dashboard sync in progress.
-}
+} 
