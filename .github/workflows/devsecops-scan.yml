@@ -1,5 +1,11 @@
 name: DevSecOps-Scan
 
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
 permissions:
   contents: read
   security-events: write
