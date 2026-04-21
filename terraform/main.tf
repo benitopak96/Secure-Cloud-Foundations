@@ -57,12 +57,21 @@ resource "google_compute_firewall" "allow_ssh" {
   priority      = 900
 }
 
-# 6. Create a separate bucket for LOGS (This fixes CKV_GCP_62)
+# 6. Create a separate bucket for LOGS
 resource "google_storage_bucket" "logging_bucket" {
   name                     = "tyrant-infra-logs-vault"
   location                 = "US"
   public_access_prevention = "enforced"
   uniform_bucket_level_access = true
+
+  # FIXES CKV_GCP_78: Ensures log integrity
+  versioning {
+    enabled = true
+  }
+
+  # SUPPRESSES CKV_GCP_62: 
+  # This comment tells Checkov: "I know what I'm doing, stop asking for logs on the log bucket."
+  # checkov:skip=CKV_GCP_62: This is the root logging bucket; recursive logging is not required.
 }
 
 # 7. Create your Secure Data Bucket
