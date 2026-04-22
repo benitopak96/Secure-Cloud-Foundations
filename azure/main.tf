@@ -1,175 +1,158 @@
-# 1. Define the Azure Provider
+# =============================================================
+# TyrantNetworks - Azure Security Infrastructure
+# Secure-Cloud-Foundations | azure/main.tf
+# =============================================================
+
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 3.0"
+    }
+  }
+}
+
 provider "azurerm" {
   features {}
 }
 
-# 2. Create a Resource Group
-resource "azurerm_resource_group" "secure_rg" {
-  name     = "tyrant-secure-resources"
-  location = "East US"
+# -------------------------------------------------------------
+# 1. Resource Group - "tyrant-eye"
+# -------------------------------------------------------------
+resource "azurerm_resource_group" "tyrant_eye" {
+  name     = "tyrant-eye"
+  location = "Canada Central"
 }
 
-# 3. Create a Secure Virtual Network (VNet)
-resource "azurerm_virtual_network" "secure_vnet" {
-  name                = "secure-production-vnet"
-  address_space       = ["10.0.0.0/16"]
-  location            = azurerm_resource_group.secure_rg.location
-  resource_group_name = azurerm_resource_group.secure_rg.name
-}
-
-# 4. Create a Network Security Group (NSG) - The "Firewall"
-resource "azurerm_network_security_group" "secure_nsg" {
-  name                = "production-nsg"
-  location            = azurerm_resource_group.secure_rg.location
-  resource_group_name = azurerm_resource_group.secure_rg.name
-
-  # SECURITY: Explicitly deny all inbound traffic as a baseline
-  security_rule {
-    name                       = "DenyAllInbound"
-    priority                   = 4096
-    direction                  = "Inbound"
-    access                     = "Deny"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "*"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-}
-
-# 5. Create a Hardened Azure Storage Account
-resource "azurerm_storage_account" "secure_storage" {
-  name                          = "tyrantsecstorage001"
-  resource_group_name           = azurerm_resource_group.secure_rg.name
-  location                      = azurerm_resource_group.secure_rg.location
-  account_tier                  = "Standard"
-  account_replication_type      = "GRS"
-  min_tls_version               = "TLS1_2" # FIXES CKV_AZURE_44
-  allow_nested_items_to_be_public = false  # FIXES CKV2_AZURE_47 & CKV_AZURE_190
-
-  public_network_access_enabled = false
-  shared_access_key_enabled     = false
-
-  blob_properties {
-    versioning_enabled = true
-    delete_retention_policy {
-      days = 7 # FIXES CKV2_AZURE_38: Soft-delete
-    }
-  }
-
-  queue_properties {
-    logging {
-      delete                = true
-      read                  = true
-      write                 = true
-      version               = "1.0"
-      retention_policy_days = 10
-    }
-  }
-
-  # checkov:skip=CKV2_AZURE_33: Private endpoint managed via centralized Hub-Spoke VNet.
-  # checkov:skip=CKV2_AZURE_1: Microsoft-managed keys (MMK) used for cost-efficiency.
-  # checkov:skip=CKV_AZURE_33: Queue logging enabled; dashboard sync in progress.
-
-# 6. Create the "Brain" database for AI analysis
-resource "azurerm_log_analytics_workspace" "tyrant_law" {
-  name                = "tyrant-security-law"
-  location            = azurerm_resource_group.secure_rg.location
-  resource_group_name = azurerm_resource_group.secure_rg.name
+# -------------------------------------------------------------
+# 2. Log Analytics Workspace - "Tyrant-Sentinel-Logs"
+# Collects WireGuard VPN logs from TyrantNetworks-Canada VPS
+# -------------------------------------------------------------
+resource "azurerm_log_analytics_workspace" "sentinel_logs" {
+  name                = "tyrant-sentinel-logs"
+  location            = azurerm_resource_group.tyrant_eye.location
+  resource_group_name = azurerm_resource_group.tyrant_eye.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
 }
 
-# 7. Connect your Storage Account to the "Brain"
-resource "azurerm_monitor_diagnostic_setting" "storage_diagnostics" {
-  name                       = "storage-to-ai-brain"
-  target_resource_id         = azurerm_storage_account.secure_storage.id
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.tyrant_law.id
-
-  enabled_log {
-    category = "StorageRead"
-  }
-  enabled_log {
-    category = "StorageWrite"
-  }
-  metric {
-    category = "AllMetrics"
-    enabled  = true
-  }
-
-# 8. Create an Automated AI Alert Rule in Sentinel
-resource "azurerm_sentinel_alert_rule_scheduled" "firewall_tamper_detect" {
-  name                       = "detect-firewall-tampering"
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.tyrant_law.id
-  display_name               = "High Severity: Firewall Rule Tampering Detected"
-  severity                   = "High"
-  query                      = <<QUERY
-    AzureActivity
-    | where OperationNameValue == "Microsoft.Network/networkSecurityGroups/securityRules/write"
-    | where ActivityStatusValue == "Success"
-    | extend User = Caller
-QUERY
-  query_frequency            = "PT5M"
-  query_period               = "PT5M"
-  trigger_threshold          = 0
-  trigger_operator           = "GreaterThan"
-
-# 9. Create a Logic App (The "Playbook" Container)
-resource "azurerm_logic_app_workflow" "auto_remediate" {
-  name                = "tyrant-eye-auto-remediate"
-  location            = azurerm_resource_group.secure_rg.location
-  resource_group_name = azurerm_resource_group.secure_rg.name
+# -------------------------------------------------------------
+# 3. Microsoft Sentinel
+# SIEM layer on top of Log Analytics
+# -------------------------------------------------------------
+resource "azurerm_sentinel_log_analytics_workspace_onboarding" "sentinel" {
+  workspace_id = azurerm_log_analytics_workspace.sentinel_logs.id
 }
 
-# 10. Link the Sentinel Alert to the Automation Playbook
-resource "azurerm_sentinel_automation_rule" "block_attacker" {
-  name                       = "block-malicious-ip-rule"
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.tyrant_law.id
-  display_name               = "Auto-Block Firewall Tampers"
+# -------------------------------------------------------------
+# 4. Sentinel Alert Rule - New VPN Session Detection
+# Triggers when wg-easy Docker logs a new peer session
+# -------------------------------------------------------------
+resource "azurerm_sentinel_alert_rule_scheduled" "vpn_session_detected" {
+  name                       = "new-vpn-session-detected"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.sentinel_logs.id
+  display_name               = "New VPN Session Detected"
+  severity                   = "Medium"
+  enabled                    = true
+
+  query = <<QUERY
+Syslog
+| where ProcessName == "wireguard"
+| where SyslogMessage contains "New Session"
+| project TimeGenerated, Computer, SyslogMessage
+QUERY
+
+  query_frequency = "PT5M"
+  query_period    = "PT5M"
+
+  trigger_operator  = "GreaterThan"
+  trigger_threshold = 0
+}
+
+# -------------------------------------------------------------
+# 5. Logic App - TyrantVPN Alert Playbook
+# Sends email via SMTP when VPN incident is created
+# -------------------------------------------------------------
+resource "azurerm_logic_app_workflow" "vpn_alert_playbook" {
+  name                = "TyrantVPN-Alert-Playbook"
+  location            = azurerm_resource_group.tyrant_eye.location
+  resource_group_name = azurerm_resource_group.tyrant_eye.name
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  tags = {
+    purpose = "VPN session email alerting"
+    sender  = "noreply@tyrantnetworks.com"
+  }
+}
+
+# -------------------------------------------------------------
+# 6. Sentinel Automation Rule
+# Links the VPN alert to the Logic App playbook
+# -------------------------------------------------------------
+resource "azurerm_sentinel_automation_rule" "vpn_alert_automation" {
+  name                       = "vpn-session-email-alert"
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.sentinel_logs.id
+  display_name               = "VPN Session Email Alert"
   order                      = 1
   enabled                    = true
-  expiration_date_utc        = "2027-01-01T00:00:00Z"
-
-  action_incident {
-    order                  = 1
-    status                 = "Active"
-    classification         = "TruePositive"
-    classification_reason  = "SuspiciousActivity"
-  }
 
   condition {
     operator = "Contains"
     property = "IncidentTitle"
-    values   = ["Firewall Rule Tampering Detected"]
+    values   = ["New VPN Session Detected"]
   }
 
-# 11. Give the Automation "Badge" (Identity) to the Logic App
-resource "azurerm_logic_app_workflow" "auto_remediate" {
-  name                = "tyrant-eye-auto-remediate"
-  location            = azurerm_resource_group.secure_rg.location
-  resource_group_name = azurerm_resource_group.secure_rg.name
-
-  # THIS IS THE KEY ADDITION:
-  identity {
-    type = "SystemAssigned"
+  action_incident {
+    order  = 1
+    status = "Active"
   }
 }
 
-# 12. Assign the "Network Contributor" role so it can actually block IPs
-resource "azurerm_role_assignment" "logic_app_network_admin" {
-  scope                = azurerm_resource_group.secure_rg.id
-  role_definition_name = "Network Contributor"
-  principal_id         = azurerm_logic_app_workflow.auto_remediate.identity[0].principal_id
+# -------------------------------------------------------------
+# 7. Data Collection Rule - TyrantVPN-Logs-DCR
+# Routes syslog from VPS Azure Arc machine to Log Analytics
+# -------------------------------------------------------------
+resource "azurerm_monitor_data_collection_rule" "vpn_logs" {
+  name                = "TyrantVPN-Logs-DCR"
+  resource_group_name = azurerm_resource_group.tyrant_eye.name
+  location            = azurerm_resource_group.tyrant_eye.location
 
-# 13. Create a Secure Secret for the AI Notification Webhook
-resource "azurerm_key_vault_secret" "notification_webhook" {
-  name         = "tyrant-eye-webhook"
-  value        = "YOUR_DISCORD_OR_SLACK_WEBHOOK_HERE"
-  key_vault_id = azurerm_key_vault.secure_vault.id # Assuming you have a vault from previous hardening
+  destinations {
+    log_analytics {
+      workspace_resource_id = azurerm_log_analytics_workspace.sentinel_logs.id
+      name                  = "tyrant-sentinel-logs"
+    }
+  }
+
+  data_flow {
+    streams      = ["Microsoft-Syslog"]
+    destinations = ["tyrant-sentinel-logs"]
+  }
+
+  data_sources {
+    syslog {
+      facility_names = ["local0"]
+      log_levels     = ["Info", "Warning", "Error"]
+      name           = "wireguard-syslog"
+      streams        = ["Microsoft-Syslog"]
+    }
+  }
 }
 
-# 14. Add a "Note" to the Sentinel Incident for the AI to process
-resource "azurerm_sentinel_incident_comment" "ai_summary_placeholder" {
-  incident_id = "ai-processing-hook" # This hooks into your Logic App logic
-  comment     = "Tyrant-Eye AI: Analysis in progress... Blocking malicious IP and summarizing event."
+# -------------------------------------------------------------
+# Outputs
+# -------------------------------------------------------------
+output "resource_group" {
+  value = azurerm_resource_group.tyrant_eye.name
+}
+
+output "log_analytics_workspace_id" {
+  value = azurerm_log_analytics_workspace.sentinel_logs.id
+}
+
+output "logic_app_name" {
+  value = azurerm_logic_app_workflow.vpn_alert_playbook.name
 }
